@@ -12,8 +12,12 @@ from fastcore.script import call_parse
 from fastcore.xtras import globtastic
 from datetime import datetime, timedelta
 
-# %% ../nbs/00_core.ipynb 10
-def create_backup(src, dest_dir, pattern=None, skip_pattern=None, dry_run=False):
+# %% ../nbs/00_core.ipynb 11
+def create_backup(src, dest_dir, dry_run=False,
+                 recursive:bool=True, symlinks:bool=True, 
+                 file_glob:str=None, file_re:str=None,
+                 folder_re:str=None, skip_file_glob:str=None,
+                 skip_file_re:str=None, skip_folder_re:str=None):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     src_path = Path(src)
     dest_path = Path(dest_dir) / timestamp
@@ -22,10 +26,11 @@ def create_backup(src, dest_dir, pattern=None, skip_pattern=None, dry_run=False)
     if src_path.is_file():
         files_to_copy = [src_path]
     else:
-        if pattern or skip_pattern:
-            files_to_copy = globtastic(src_path, file_glob=pattern, skip_file_glob=skip_pattern)
-            files_to_copy = [Path(f) for f in files_to_copy]
-        else: files_to_copy = src_path.rglob('*')
+        files_to_copy = globtastic(src_path,recursive=recursive, symlinks=symlinks,
+                                   file_glob=file_glob, file_re=file_re,
+                                   folder_re=folder_re, skip_file_glob=skip_file_glob,
+                                   skip_file_re=skip_file_re, skip_folder_re=skip_folder_re)
+        files_to_copy = [Path(f) for f in files_to_copy]
     
     for file in files_to_copy:
         if file.is_file():
@@ -38,7 +43,7 @@ def create_backup(src, dest_dir, pattern=None, skip_pattern=None, dry_run=False)
             except Exception as e:
                 logging.warning(f"Failed to copy {file}: {e}")
 
-# %% ../nbs/00_core.ipynb 20
+# %% ../nbs/00_core.ipynb 21
 def clean_dates(dates, now=None, max_ages=(2, 14, 60)):
     now = now or datetime.now()
     clean = []
@@ -51,24 +56,34 @@ def clean_dates(dates, now=None, max_ages=(2, 14, 60)):
     clean.extend(dates[-5:])  # Keep the newest 5
     return sorted(set(clean))  # Remove duplicates and sort
 
-# %% ../nbs/00_core.ipynb 27
+# %% ../nbs/00_core.ipynb 28
 @call_parse
 def run_backup(
     src:str, # The source to be backed up
     dest:str, # The destination directory
     max_ages:str="2,14,60", # The max age(s) in days for the different backups
     log_file:str='backup.log',
-    pattern:str=None, # Globtastic file_glob pattern
-    skip_pattern:str=None, # Globtastic skip_file_glob pattern
-    dry_run:bool=False # Dry run?
+    dry_run:bool=False, # Dry run?
+    recursive:bool=True, 
+    symlinks:bool=True, 
+    file_glob:str=None, 
+    file_re:str=None,
+    folder_re:str=None, 
+    skip_file_glob:str=None,
+    skip_file_re:str=None, 
+    skip_folder_re:str=None
 ):
-    "Run backup and cleanup old files"
+    "Run backup and cleanup old files. Takes globtastic args."
     
     # Set up logging
     logging.basicConfig(filename=log_file, level=logging.DEBUG,
                         format='%(asctime)s - %(levelname)s - %(message)s')
     try:
-        create_backup(src, dest, pattern=pattern, skip_pattern=skip_pattern, dry_run=dry_run)
+        create_backup(src, dest, dry_run=dry_run,
+                     recursive=recursive, symlinks=symlinks,
+                     file_glob=file_glob, file_re=file_re,
+                     folder_re=folder_re, skip_file_glob=skip_file_glob,
+                     skip_file_re=skip_file_re, skip_folder_re=skip_folder_re)
         logging.info(f"Backup created: {src} -> {dest}")
     except Exception as e:
         logging.error(f"Backup failed: {str(e)}", exc_info=True)
