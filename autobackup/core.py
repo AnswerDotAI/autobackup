@@ -13,11 +13,11 @@ from fastcore.xtras import globtastic
 from datetime import datetime, timedelta
 
 # %% ../nbs/00_core.ipynb 10
-def create_backup(src, dest_dir, pattern=None, skip_pattern=None):
+def create_backup(src, dest_dir, pattern=None, skip_pattern=None, dry_run=False):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     src_path = Path(src)
     dest_path = Path(dest_dir) / timestamp
-    dest_path.mkdir(parents=True, exist_ok=True)
+    if not dry_run: dest_path.mkdir(parents=True, exist_ok=True)
     
     if src_path.is_file():
         files_to_copy = [src_path]
@@ -31,13 +31,14 @@ def create_backup(src, dest_dir, pattern=None, skip_pattern=None):
         if file.is_file():
             rel_path = file.relative_to(src_path)
             dest_file = dest_path / rel_path
-            dest_file.parent.mkdir(parents=True, exist_ok=True)
+            if not dry_run: dest_file.parent.mkdir(parents=True, exist_ok=True)
             try:
-                shutil.copy2(file, dest_file)
+                if dry_run: print(f'Copy from {file} to {dest_file}')
+                else: shutil.copy2(file, dest_file)
             except Exception as e:
                 logging.warning(f"Failed to copy {file}: {e}")
 
-# %% ../nbs/00_core.ipynb 23
+# %% ../nbs/00_core.ipynb 20
 def clean_dates(dates, now=None, max_ages=(2, 14, 60)):
     now = now or datetime.now()
     clean = []
@@ -50,7 +51,7 @@ def clean_dates(dates, now=None, max_ages=(2, 14, 60)):
     clean.extend(dates[-5:])  # Keep the newest 5
     return sorted(set(clean))  # Remove duplicates and sort
 
-# %% ../nbs/00_core.ipynb 30
+# %% ../nbs/00_core.ipynb 27
 @call_parse
 def run_backup(
     src:str, # The source to be backed up
@@ -58,7 +59,8 @@ def run_backup(
     max_ages:str="2,14,60", # The max age(s) in days for the different backups
     log_file:str='backup.log',
     pattern:str=None, # Globtastic file_glob pattern
-    skip_pattern:str=None # Globtastic skip_file_glob pattern
+    skip_pattern:str=None, # Globtastic skip_file_glob pattern
+    dry_run:bool=False # Dry run?
 ):
     "Run backup and cleanup old files"
     
@@ -66,7 +68,7 @@ def run_backup(
     logging.basicConfig(filename=log_file, level=logging.DEBUG,
                         format='%(asctime)s - %(levelname)s - %(message)s')
     try:
-        create_backup(src, dest, pattern=pattern, skip_pattern=skip_pattern)
+        create_backup(src, dest, pattern=pattern, skip_pattern=skip_pattern, dry_run=dry_run)
         logging.info(f"Backup created: {src} -> {dest}")
     except Exception as e:
         logging.error(f"Backup failed: {str(e)}", exc_info=True)
@@ -77,7 +79,8 @@ def run_backup(
         for backup in backups:
             if backup not in to_keep:
                 try:
-                    shutil.rmtree(Path(dest) / backup)
+                    if dry_run:print('Remove', Path(dest) / backup)
+                    else: shutil.rmtree(Path(dest) / backup)
                     logging.info(f"Removed old backup: {backup}")
                 except Exception as e:
                     logging.error(f"Removing old backup failed: {str(e)}", exc_info=True)
