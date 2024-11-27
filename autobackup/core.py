@@ -8,7 +8,7 @@ __all__ = ['create_backup', 'clean_dates', 'run_backup']
 # %% ../nbs/00_core.ipynb 3
 import shutil, os, time, pprint, logging
 from pathlib import Path
-from fastcore.script import call_parse
+from fastcore.script import call_parse, bool_arg
 from fastcore.xtras import globtastic
 from datetime import datetime, timedelta
 
@@ -63,9 +63,9 @@ def run_backup(
     dest:str, # The destination directory
     max_ages:str="2,14,60", # The max age(s) in days for the different backups
     log_file:str='backup.log',
-    dry_run:bool=False, # Dry run?
-    recursive:bool=True, 
-    symlinks:bool=True, 
+    dry_run:bool_arg=False, # Dry run?
+    recursive:bool_arg=True, 
+    symlinks:bool_arg=True, 
     file_glob:str=None, 
     file_re:str=None,
     folder_re:str=None, 
