@@ -67,3 +67,7 @@ To run this script hourly,
 
     sudo systemctl enable backup.timer
     sudo systemctl start backup.timer
+
+It takes additional args from fastcore’s xtra.globtastic, for example
+you can ise `-skip_folder_re '^\.\w'` to skip folders with `/.` in the
+name, useful for skipping cache.
