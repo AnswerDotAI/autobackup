@@ -9,19 +9,35 @@ __all__ = ['create_backup', 'clean_dates', 'run_backup']
 import shutil, os, time, pprint, logging
 from pathlib import Path
 from fastcore.script import call_parse
+from fastcore.xtras import globtastic
 from datetime import datetime, timedelta
 
-# %% ../nbs/00_core.ipynb 8
-def create_backup(src, dest_dir):
+# %% ../nbs/00_core.ipynb 10
+def create_backup(src, dest_dir, pattern=None, skip_pattern=None):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     src_path = Path(src)
     dest_path = Path(dest_dir) / timestamp
+    dest_path.mkdir(parents=True, exist_ok=True)
+    
     if src_path.is_file():
-        dest_path.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src_path, dest_path / src_path.name)
-    else: shutil.copytree(src, dest_path)
+        files_to_copy = [src_path]
+    else:
+        if pattern or skip_pattern:
+            files_to_copy = globtastic(src_path, file_glob=pattern, skip_file_glob=skip_pattern)
+            files_to_copy = [Path(f) for f in files_to_copy]
+        else: files_to_copy = src_path.rglob('*')
+    
+    for file in files_to_copy:
+        if file.is_file():
+            rel_path = file.relative_to(src_path)
+            dest_file = dest_path / rel_path
+            dest_file.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.copy2(file, dest_file)
+            except Exception as e:
+                logging.warning(f"Failed to copy {file}: {e}")
 
-# %% ../nbs/00_core.ipynb 14
+# %% ../nbs/00_core.ipynb 23
 def clean_dates(dates, now=None, max_ages=(2, 14, 60)):
     now = now or datetime.now()
     clean = []
@@ -34,13 +50,15 @@ def clean_dates(dates, now=None, max_ages=(2, 14, 60)):
     clean.extend(dates[-5:])  # Keep the newest 5
     return sorted(set(clean))  # Remove duplicates and sort
 
-# %% ../nbs/00_core.ipynb 21
+# %% ../nbs/00_core.ipynb 30
 @call_parse
 def run_backup(
     src:str, # The source to be backed up
     dest:str, # The destination directory
     max_ages:str="2,14,60", # The max age(s) in days for the different backups
-    log_file:str='backup.log'
+    log_file:str='backup.log',
+    pattern:str=None, # Globtastic file_glob pattern
+    skip_pattern:str=None # Globtastic skip_file_glob pattern
 ):
     "Run backup and cleanup old files"
     
@@ -48,14 +66,18 @@ def run_backup(
     logging.basicConfig(filename=log_file, level=logging.DEBUG,
                         format='%(asctime)s - %(levelname)s - %(message)s')
     try:
-        create_backup(src, dest)
+        create_backup(src, dest, pattern=pattern, skip_pattern=skip_pattern)
         logging.info(f"Backup created: {src} -> {dest}")
+    except Exception as e:
+        logging.error(f"Backup failed: {str(e)}", exc_info=True)
+    finally:
         max_ages = [int(age.strip()) for age in max_ages.split(',')]
         backups = [d.name for d in Path(dest).iterdir() if d.is_dir()]
         to_keep = clean_dates(backups, max_ages=max_ages)
         for backup in backups:
             if backup not in to_keep:
-                shutil.rmtree(Path(dest) / backup)
-                logging.info(f"Removed old backup: {backup}")
-    except Exception as e:
-        logging.error(f"Backup failed: {str(e)}", exc_info=True)
+                try:
+                    shutil.rmtree(Path(dest) / backup)
+                    logging.info(f"Removed old backup: {backup}")
+                except Exception as e:
+                    logging.error(f"Removing old backup failed: {str(e)}", exc_info=True)
