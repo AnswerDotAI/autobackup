@@ -23,7 +23,7 @@ $ pip install autobackup
 ## How to use
 
 `autobackup src dest` will make a copy of `src` (which can be a file or
-a directory) inside `dir` in a folder with the current date+time, and
+a directory) inside `dest` in a folder with the current date+time, and
 clean up any old backups based on the following rules:
 
 - The most recent 5 backups are kept
@@ -69,5 +69,5 @@ To run this script hourly,
     sudo systemctl start backup.timer
 
 It takes additional args from fastcore’s xtra.globtastic, for example
-you can ise `-skip_folder_re '^\.\w'` to skip folders with `/.` in the
+you can use `-skip_folder_re '^\.\w'` to skip folders with `/.` in the
 name, useful for skipping cache.
