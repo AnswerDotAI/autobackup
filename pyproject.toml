@@ -1,3 +1,35 @@
 [build-system]
-requires = ["setuptools>=64.0"]
+requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "autobackup"
+dynamic = ["version"]
+description = "Automatically create backups of a directory"
+readme = "README.md"
+requires-python = ">=3.7"
+license = {text = "Apache-2.0"}
+authors = [{name = "Jonathan Whitaker", email = "johnowhitaker@gmail.com"}]
+keywords = ['nbdev', 'jupyter', 'notebook', 'python']
+classifiers = ["Natural Language :: English", "Intended Audience :: Developers", "Development Status :: 3 - Alpha", "Programming Language :: Python :: 3", "Programming Language :: Python :: 3 :: Only"]
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/johnowhitaker/autobackup"
+Documentation = "https://johnowhitaker.github.io/autobackup"
+
+[project.entry-points.nbdev]
+autobackup = "autobackup._modidx:d"
+
+
+[project.scripts]
+autobackup = "autobackup.core:run_backup"
+
+[tool.setuptools.dynamic]
+version = {attr = "autobackup.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["autobackup"]
+
+[tool.nbdev]
+custom_sidebar = false
