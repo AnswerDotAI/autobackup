@@ -1,0 +1,62 @@
+[
+  {
+    "objectID": "core.html",
+    "href": "core.html",
+    "title": "core",
+    "section": "",
+    "text": "We want a script to back up a specific file/folder over different intervals. Specifically, it should\n\nCopy to some destination dir every hour (e.g. a different drive)\nKeep the last 5, and one every day, week and month (for example)\n\nWe can then rsync the destination dir to keep a remote backup.\n\n!mkdir -p demo_src\n!mkdir -p demo_dst\n!rm -rf demo_dst/*\n!rm -rf demo_src/*\n\n\n!echo \"content\" &gt; \"demo_src/test_text.txt\"\n!echo \"## content\" &gt; \"demo_src/test_two.md\"\n\n\n\nThe plan has two main steps:\n\nCreate a new backup\nClean up any old backups that are no longer needed.\n\nFor step 1 we want to go file by file in case of errors, and support a matching pattern for what to include. So, take 2:\n\nglobtastic(\"demo_src\", file_glob=\"*.md\") # Finding files\n\n(#1) ['demo_src/test_two.md']\n\n\n\nglobtastic(\"demo_src\")\n\n(#2) ['demo_src/test_text.txt','demo_src/test_two.md']\n\n\n\nsource\n\n\n\ndef create_backup(\n    src, dest_dir, dry_run:bool=False, recursive:bool=True, symlinks:bool=True, file_glob:str=None, file_re:str=None,\n    folder_re:str=None, skip_file_glob:str=None, skip_file_re:str=None, skip_folder_re:str=None\n):\n\n\ncreate_backup('demo_src', 'demo_dst')\n!ls demo_dst\n\n20241127_151709\n\n\n\n!ls demo_dst/20241127_151709\n\ntest_text.txt  test_two.md\n\n\n\n# Test single file\ncreate_backup('demo_src/test_text.txt', 'demo_dst', dry_run=True)\n\nCopy from demo_src/test_text.txt to demo_dst/20241127_151712\n\n\n\n# Test pattern\ncreate_backup('demo_src', 'demo_dst', file_glob='*.md', dry_run=True)\n\nCopy from demo_src/test_two.md to demo_dst/20241127_151721/test_two.md\n\n\n\n# Test skip_pattern\ncreate_backup('demo_src', 'demo_dst', skip_file_glob='*.md', dry_run=True)\n\nCopy from demo_src/test_text.txt to demo_dst/20241127_151737/test_text.txt\n\n\nThe harder part is the cleanup. Let’s start by generating some dates to test with.\n\ndef generate_test_dates(num_dates, base_date):\n    return [(base_date + timedelta(hours=i)).strftime(\"%Y%m%d_%H%M%S\") for i in range(num_dates)]\ntest_dates = generate_test_dates(2400, datetime.now() - timedelta(days=100))\nprint(test_dates[:5], test_dates[-5:])\n\n['20240819_151740', '20240819_161740', '20240819_171740', '20240819_181740', '20240819_191740'] ['20241127_101740', '20241127_111740', '20241127_121740', '20241127_131740', '20241127_141740']\n\n\n\n# Can I get all dates &lt; 2 months old?\n[d for d in test_dates if (datetime.now() - datetime.strptime(d, '%Y%m%d_%H%M%S')).days &lt; 60][:3]\n\n['20240928_161740', '20240928_171740', '20240928_181740']\n\n\nNow we want to grab the most recent 5, and then the oldest below some threshold.\n\nsource\n\n\n\n\ndef clean_dates(\n    dates, now:NoneType=None, max_ages:tuple=(2, 14, 60)\n):\n\n\nclean_dates(test_dates)\n\n['20240928_161740',\n '20241113_161740',\n '20241125_161740',\n '20241127_101740',\n '20241127_111740',\n '20241127_121740',\n '20241127_131740',\n '20241127_141740']\n\n\nNow we want code that starts with the same test dates etc as above, but then simulates time passing by adding an hour to ‘now’ and a date to test dates every step then printing out a (prettified) version of clean_dates to check it’s doing as I expect over a simulated month.\n\n# # Initialize\n# now = datetime.now()\n# test_dates = generate_test_dates(2400, now - timedelta(days=100))\n\n# # Simulate time passing\n# for _ in range(30 * 24):  # Simulate a month (30 days * 24 hours)\n#     now += timedelta(hours=1)\n#     test_dates.append(now.strftime(\"%Y%m%d_%H%M%S\"))\n#     test_dates = clean_dates(test_dates, now)  # Clean up old dates\n#     if _ % 24 == 0:  # Print once a day\n#         print(f\"\\nDay {_ // 24 + 1}:\")\n#         pprint.pprint(test_dates)\n\nNB: Yay, it looks to be doing mostly what I want! I can collapse the output, if you’re viewing this in a notebook my apologies :)\n\n\n\n\nNow that those two pieces of functionality seem to be working, we can wrap this up as a script using fastcore’s call_parse, have it run the backup, clean up old files, and log any errors or messages to backup.log\n\nsource\n\n\n\ndef run_backup(\n    src:str, # The source to be backed up\n    dest:str, # The destination directory\n    max_ages:str='2,14,60', # The max age(s) in days for the different backups\n    log_file:str='backup.log', dry_run:bool_arg=False, # Dry run?\n    recursive:bool_arg=True, symlinks:bool_arg=True, file_glob:str=None, file_re:str=None, folder_re:str=None,\n    skip_file_glob:str=None, skip_file_re:str=None, skip_folder_re:str=None\n):\n\nRun backup and cleanup old files. Takes globtastic args.\n\n!ls demo_src\n\ntest_text.txt  test_two.md\n\n\nTesting a directory:\n\n!rm -r demo_dst/*\n\n\nrun_backup('demo_src', 'demo_dst')\n!ls demo_dst\n\n20241127_151747\n\n\n\n!ls demo_dst/20241127_151747\n\ntest_text.txt  test_two.md\n\n\nTesting a pattern\n\n!rm -r demo_dst/*\n\n\nrun_backup('demo_src', 'demo_dst', skip_file_glob=\"*.md\", dry_run=True)\n\nCopy from demo_src/test_text.txt to demo_dst/20241127_151801/test_text.txt",
+    "crumbs": [
+      "core"
+    ]
+  },
+  {
+    "objectID": "core.html#the-core-functionality",
+    "href": "core.html#the-core-functionality",
+    "title": "core",
+    "section": "",
+    "text": "The plan has two main steps:\n\nCreate a new backup\nClean up any old backups that are no longer needed.\n\nFor step 1 we want to go file by file in case of errors, and support a matching pattern for what to include. So, take 2:\n\nglobtastic(\"demo_src\", file_glob=\"*.md\") # Finding files\n\n(#1) ['demo_src/test_two.md']\n\n\n\nglobtastic(\"demo_src\")\n\n(#2) ['demo_src/test_text.txt','demo_src/test_two.md']\n\n\n\nsource\n\n\n\ndef create_backup(\n    src, dest_dir, dry_run:bool=False, recursive:bool=True, symlinks:bool=True, file_glob:str=None, file_re:str=None,\n    folder_re:str=None, skip_file_glob:str=None, skip_file_re:str=None, skip_folder_re:str=None\n):\n\n\ncreate_backup('demo_src', 'demo_dst')\n!ls demo_dst\n\n20241127_151709\n\n\n\n!ls demo_dst/20241127_151709\n\ntest_text.txt  test_two.md\n\n\n\n# Test single file\ncreate_backup('demo_src/test_text.txt', 'demo_dst', dry_run=True)\n\nCopy from demo_src/test_text.txt to demo_dst/20241127_151712\n\n\n\n# Test pattern\ncreate_backup('demo_src', 'demo_dst', file_glob='*.md', dry_run=True)\n\nCopy from demo_src/test_two.md to demo_dst/20241127_151721/test_two.md\n\n\n\n# Test skip_pattern\ncreate_backup('demo_src', 'demo_dst', skip_file_glob='*.md', dry_run=True)\n\nCopy from demo_src/test_text.txt to demo_dst/20241127_151737/test_text.txt\n\n\nThe harder part is the cleanup. Let’s start by generating some dates to test with.\n\ndef generate_test_dates(num_dates, base_date):\n    return [(base_date + timedelta(hours=i)).strftime(\"%Y%m%d_%H%M%S\") for i in range(num_dates)]\ntest_dates = generate_test_dates(2400, datetime.now() - timedelta(days=100))\nprint(test_dates[:5], test_dates[-5:])\n\n['20240819_151740', '20240819_161740', '20240819_171740', '20240819_181740', '20240819_191740'] ['20241127_101740', '20241127_111740', '20241127_121740', '20241127_131740', '20241127_141740']\n\n\n\n# Can I get all dates &lt; 2 months old?\n[d for d in test_dates if (datetime.now() - datetime.strptime(d, '%Y%m%d_%H%M%S')).days &lt; 60][:3]\n\n['20240928_161740', '20240928_171740', '20240928_181740']\n\n\nNow we want to grab the most recent 5, and then the oldest below some threshold.\n\nsource\n\n\n\n\ndef clean_dates(\n    dates, now:NoneType=None, max_ages:tuple=(2, 14, 60)\n):\n\n\nclean_dates(test_dates)\n\n['20240928_161740',\n '20241113_161740',\n '20241125_161740',\n '20241127_101740',\n '20241127_111740',\n '20241127_121740',\n '20241127_131740',\n '20241127_141740']\n\n\nNow we want code that starts with the same test dates etc as above, but then simulates time passing by adding an hour to ‘now’ and a date to test dates every step then printing out a (prettified) version of clean_dates to check it’s doing as I expect over a simulated month.\n\n# # Initialize\n# now = datetime.now()\n# test_dates = generate_test_dates(2400, now - timedelta(days=100))\n\n# # Simulate time passing\n# for _ in range(30 * 24):  # Simulate a month (30 days * 24 hours)\n#     now += timedelta(hours=1)\n#     test_dates.append(now.strftime(\"%Y%m%d_%H%M%S\"))\n#     test_dates = clean_dates(test_dates, now)  # Clean up old dates\n#     if _ % 24 == 0:  # Print once a day\n#         print(f\"\\nDay {_ // 24 + 1}:\")\n#         pprint.pprint(test_dates)\n\nNB: Yay, it looks to be doing mostly what I want! I can collapse the output, if you’re viewing this in a notebook my apologies :)",
+    "crumbs": [
+      "core"
+    ]
+  },
+  {
+    "objectID": "core.html#turning-it-into-a-script",
+    "href": "core.html#turning-it-into-a-script",
+    "title": "core",
+    "section": "",
+    "text": "Now that those two pieces of functionality seem to be working, we can wrap this up as a script using fastcore’s call_parse, have it run the backup, clean up old files, and log any errors or messages to backup.log\n\nsource\n\n\n\ndef run_backup(\n    src:str, # The source to be backed up\n    dest:str, # The destination directory\n    max_ages:str='2,14,60', # The max age(s) in days for the different backups\n    log_file:str='backup.log', dry_run:bool_arg=False, # Dry run?\n    recursive:bool_arg=True, symlinks:bool_arg=True, file_glob:str=None, file_re:str=None, folder_re:str=None,\n    skip_file_glob:str=None, skip_file_re:str=None, skip_folder_re:str=None\n):\n\nRun backup and cleanup old files. Takes globtastic args.\n\n!ls demo_src\n\ntest_text.txt  test_two.md\n\n\nTesting a directory:\n\n!rm -r demo_dst/*\n\n\nrun_backup('demo_src', 'demo_dst')\n!ls demo_dst\n\n20241127_151747\n\n\n\n!ls demo_dst/20241127_151747\n\ntest_text.txt  test_two.md\n\n\nTesting a pattern\n\n!rm -r demo_dst/*\n\n\nrun_backup('demo_src', 'demo_dst', skip_file_glob=\"*.md\", dry_run=True)\n\nCopy from demo_src/test_text.txt to demo_dst/20241127_151801/test_text.txt",
+    "crumbs": [
+      "core"
+    ]
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "autobackup",
+    "section": "",
+    "text": "NB: We have since found that rsnapshot does the job admirably, this is no longer being maintained.",
+    "crumbs": [
+      "autobackup"
+    ]
+  },
+  {
+    "objectID": "index.html#usage",
+    "href": "index.html#usage",
+    "title": "autobackup",
+    "section": "Usage",
+    "text": "Usage\n\nInstallation\nInstall latest from the GitHub repository:\n$ pip install git+https://github.com/johnowhitaker/autobackup.git\nor from pypi\n$ pip install autobackup",
+    "crumbs": [
+      "autobackup"
+    ]
+  },
+  {
+    "objectID": "index.html#how-to-use",
+    "href": "index.html#how-to-use",
+    "title": "autobackup",
+    "section": "How to use",
+    "text": "How to use\nautobackup src dest will make a copy of src (which can be a file or a directory) inside dir in a folder with the current date+time, and clean up any old backups based on the following rules:\n\nThe most recent 5 backups are kept\nFor each number of days in --max_ages (default is “2,14,60”) the oldest one below that age is kept.\n\nThis ensures that you have a few recent backups, one up to 2 days old, one up to 2 weeks old and one up to 2 months old.\nTo run this script hourly,\n\nCreate a service file (e.g. /etc/systemd/system/backup.service):\n\n[Unit]\nDescription=Hourly Backup Service\n\n[Service]\nExecStart=autobackup /path/to/src /path/to/dest\n\n[Install]\nWantedBy=multi-user.target\n\nCreate a timer file (e.g. /etc/systemd/system/backup.timer):\n\n[Unit]\nDescription=Run Backup Service Hourly\n\n[Timer]\nOnCalendar=hourly\n\n[Install]\nWantedBy=timers.target\n\nEnable and start the timer:\n\nsudo systemctl enable backup.timer\nsudo systemctl start backup.timer\nIt takes additional args from fastcore’s xtra.globtastic, for example you can ise -skip_folder_re '^\\.\\w' to skip folders with /. in the name, useful for skipping cache.",
+    "crumbs": [
+      "autobackup"
+    ]
+  }
+]
